@@ -2,12 +2,25 @@
 
 #include "cell.h"
 #include "common.h"
-
 #include <functional>
+#include <tuple>
 
 class Sheet : public SheetInterface {
+    enum class OutMode{ TEXT, VALUE };
+
+    struct Hasher{
+        size_t operator()(Position pos) const noexcept{
+            return hasher_(pos.row)*Position::MAX_COLS + hasher_(pos.col);
+        }
+    private:
+        std::hash<int> hasher_;
+    };
+
+    using Table = std::unordered_map<Position, std::unique_ptr<Cell>, Hasher>;
 public:
-    ~Sheet();
+
+
+    ~Sheet() override;
 
     void SetCell(Position pos, std::string text) override;
 
@@ -20,15 +33,18 @@ public:
 
     void PrintValues(std::ostream& output) const override;
     void PrintTexts(std::ostream& output) const override;
+private:
+    void TryChangePrintableArea(Position pos) noexcept;
 
-    const Cell* GetConcreteCell(Position pos) const;
-    Cell* GetConcreteCell(Position pos);
+    void ComputePrintableArea();
+
+    void Printer(std::ostream& output, const OutMode& mode) const;
 
 private:
-    void MaybeIncreaseSizeToIncludePosition(Position pos);
-    void PrintCells(std::ostream& output,
-                    const std::function<void(const CellInterface&)>& printCell) const;
-    Size GetActualSize() const;
-
-    std::vector<std::vector<std::unique_ptr<Cell>>> cells_;
+    Table table_;
+    Size printable_size_;
 };
+
+inline void ValidatePosition(Position pos){
+    if(!pos.IsValid()) { throw InvalidPositionException("Invalid position"); }
+}
