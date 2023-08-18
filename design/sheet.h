@@ -4,6 +4,9 @@
 #include "common.h"
 #include <functional>
 #include <tuple>
+#include <set>
+#include <iostream>
+#include <optional>
 
 class Sheet : public SheetInterface {
     enum class OutMode{ TEXT, VALUE };
@@ -12,6 +15,7 @@ class Sheet : public SheetInterface {
         size_t operator()(Position pos) const noexcept{
             return hasher_(pos.row)*Position::MAX_COLS + hasher_(pos.col);
         }
+
     private:
         std::hash<int> hasher_;
     };
@@ -33,12 +37,16 @@ public:
 
     void PrintValues(std::ostream& output) const override;
     void PrintTexts(std::ostream& output) const override;
+
 private:
     void TryChangePrintableArea(Position pos) noexcept;
-
     void ComputePrintableArea();
-
     void Printer(std::ostream& output, const OutMode& mode) const;
+
+
+    bool IsCycle(Position position, const std::set<Position>& references, std::set<Position>& verified) const;
+    void CheckCyclic(const Cell* cell, Position position);
+    void UpdateDependencies(Cell* cell, Position pos);
 
 private:
     Table table_;
@@ -46,5 +54,7 @@ private:
 };
 
 inline void ValidatePosition(Position pos){
-    if(!pos.IsValid()) { throw InvalidPositionException("Invalid position"); }
+    if(!pos.IsValid()) {
+        throw InvalidPositionException("Invalid position");
+    }
 }

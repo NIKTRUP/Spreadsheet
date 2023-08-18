@@ -1,23 +1,17 @@
 #include "sheet.h"
 
-#include "cell.h"
-#include "common.h"
-
-#include <functional>
-#include <iostream>
-#include <optional>
-
 using namespace std::literals;
 
 Sheet::~Sheet() = default;
 
 void Sheet::SetCell(Position pos, std::string text) {
     ValidatePosition(pos);
-    if (table_.count(pos) == 0){
-        table_[pos] = std::make_unique<Cell>(text, *this);
-    }else{
-        table_.at(pos)->Set(std::move(text));
-    }
+
+    auto cell = std::make_unique<Cell>(text, *this);
+    CheckCyclic(cell.get(), pos);
+    UpdateDependencies(cell.get(), pos);
+
+    table_[pos] = std::move(cell);
     TryChangePrintableArea(pos);
 }
 
@@ -27,7 +21,7 @@ const CellInterface* Sheet::GetCell(Position pos) const {
 
 CellInterface* Sheet::GetCell(Position pos) {
     ValidatePosition(pos);
-    return (table_.count(pos) != 0) ?  table_.at(pos).get() : nullptr;
+    return (table_.count(pos) != 0) ? table_.at(pos).get() : nullptr;
 }
 
 void Sheet::ClearCell(Position pos) {
@@ -85,5 +79,42 @@ void Sheet::Printer(std::ostream& output, const OutMode& mode) const{
             }
         }
         output << '\n';
+    }
+}
+
+bool Sheet::IsCycle(Position position, const std::set<Position>& references, std::set<Position>& verified) const {
+    if (references.count(position)){ return true; }
+
+    for (Position pos : references){
+        if (pos.IsValid() && !verified.count(pos)){
+            verified.insert(pos);
+            auto cell = GetCell(pos);
+            if (cell) {
+                auto ref = cell->GetReferencedCells();
+                if (IsCycle(position, {ref.begin(), ref.end()}, verified)){ return true; }
+            }
+        }
+    }
+
+    return false;
+}
+
+void Sheet::CheckCyclic(const Cell* cell, Position position) {
+    auto positions = cell->GetReferencedCells();
+    std::set<Position> referenced(positions.begin(), positions.end()),
+            verified;
+    if(IsCycle(position, referenced, verified)){
+        throw CircularDependencyException("Cycle detected");
+    }
+}
+
+void Sheet::UpdateDependencies(Cell* cell, Position pos){
+    for (const auto& pos_ref : cell->GetReferencedCells()){
+        CellInterface *referenced_cell = GetCell(pos_ref);
+        if (!referenced_cell){
+            table_[pos_ref] = std::make_unique<Cell>(*this);
+            referenced_cell = table_.at(pos_ref).get();
+        }
+        referenced_cell->PushBackDependentCell(pos);
     }
 }

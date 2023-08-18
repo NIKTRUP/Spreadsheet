@@ -7,6 +7,7 @@
 #include <string_view>
 #include <variant>
 #include <vector>
+#include <cassert>
 
 // Позиция ячейки. Индексация с нуля.
 struct Position {
@@ -16,8 +17,8 @@ struct Position {
     bool operator==(Position rhs) const;
     bool operator<(Position rhs) const;
 
-    bool IsValid() const;
-    std::string ToString() const;
+    [[nodiscard]] bool IsValid() const;
+    [[nodiscard]] std::string ToString() const;
 
     static Position FromString(std::string_view str);
 
@@ -42,13 +43,23 @@ public:
         Div0,  // в результате вычисления возникло деление на ноль
     };
 
-    FormulaError(Category category);
+    FormulaError(Category category): category_(category) {}
 
-    Category GetCategory() const;
+    [[nodiscard]] Category GetCategory() const { return category_; }
 
-    bool operator==(FormulaError rhs) const;
+    bool operator==(FormulaError rhs) const { return category_ == rhs.GetCategory(); }
 
-    std::string_view ToString() const;
+    [[nodiscard]] std::string_view ToString() const{
+        switch (category_) {
+            case Category::Div0: return "#DIV/0!";
+            case Category::Ref: return "#REF!";
+            case Category::Value: return "#VALUE!";
+            default:
+                // have to do this because VC++ has a buggy warning
+                assert(false);
+                return "";
+        }
+    }
 
 private:
     Category category_;
@@ -87,16 +98,21 @@ public:
     // Возвращает видимое значение ячейки.
     // В случае текстовой ячейки это её текст (без экранирующих символов). В
     // случае формулы - числовое значение формулы или сообщение об ошибке.
-    virtual Value GetValue() const = 0;
+    [[nodiscard]] virtual Value GetValue() const = 0;
     // Возвращает внутренний текст ячейки, как если бы мы начали её
     // редактирование. В случае текстовой ячейки это её текст (возможно,
     // содержащий экранирующие символы). В случае формулы - её выражение.
-    virtual std::string GetText() const = 0;
+    [[nodiscard]] virtual std::string GetText() const = 0;
 
     // Возвращает список ячеек, которые непосредственно задействованы в данной
     // формуле. Список отсортирован по возрастанию и не содержит повторяющихся
     // ячеек. В случае текстовой ячейки список пуст.
-    virtual std::vector<Position> GetReferencedCells() const = 0;
+    [[nodiscard]] virtual std::vector<Position> GetReferencedCells() const = 0;
+
+    virtual void PushBackDependentCell(Position pos) = 0;
+
+    // Очищает кэш текущей и всех зависимых ячеек.
+    virtual void ClearCache() = 0;
 };
 
 inline constexpr char FORMULA_SIGN = '=';
@@ -124,7 +140,7 @@ public:
 
     // Возвращает значение ячейки.
     // Если ячейка пуста, может вернуть nullptr.
-    virtual const CellInterface* GetCell(Position pos) const = 0;
+    [[nodiscard]] virtual const CellInterface* GetCell(Position pos) const = 0;
     virtual CellInterface* GetCell(Position pos) = 0;
 
     // Очищает ячейку.
@@ -135,7 +151,7 @@ public:
     // Вычисляет размер области, которая участвует в печати.
     // Определяется как ограничивающий прямоугольник всех ячеек с непустым
     // текстом.
-    virtual Size GetPrintableSize() const = 0;
+    [[nodiscard]] virtual Size GetPrintableSize() const = 0;
 
     // Выводит всю таблицу в переданный поток. Столбцы разделяются знаком
     // табуляции. После каждой строки выводится символ перевода строки. Для

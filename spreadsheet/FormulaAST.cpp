@@ -72,10 +72,10 @@ namespace ASTImpl {
         virtual ~Expr() = default;
         virtual void Print(std::ostream& out) const = 0;
         virtual void DoPrintFormula(std::ostream& out, ExprPrecedence precedence) const = 0;
-        virtual double Evaluate(const CellTranslator& function) const = 0;
+        [[nodiscard]] virtual double Evaluate(const CellTranslator& args) const = 0;
 
         // higher is tighter
-        virtual ExprPrecedence GetPrecedence() const = 0;
+        [[nodiscard]] virtual ExprPrecedence GetPrecedence() const = 0;
 
         void PrintFormula(std::ostream& out, ExprPrecedence parent_precedence,
                           bool right_child = false) const {
@@ -125,7 +125,7 @@ namespace ASTImpl {
                 rhs_->PrintFormula(out, precedence, /* right_child = */ true);
             }
 
-            ExprPrecedence GetPrecedence() const override {
+            [[nodiscard]] ExprPrecedence GetPrecedence() const override {
                 switch (type_) {
                     case Add:
                         return EP_ADD;
@@ -142,18 +142,38 @@ namespace ASTImpl {
                 }
             }
 
-// Реализуйте метод Evaluate() для бинарных операций.
-// При делении на 0 выбрасывайте ошибку вычисления FormulaError
-            double Evaluate(const CellTranslator& function) const override {
+            [[nodiscard]] double Evaluate(const CellTranslator& args) const override {
                 switch (type_) {
-                    case Type::Add: return lhs_->Evaluate(function) + rhs_->Evaluate(function);
-                    case Type::Subtract: return lhs_->Evaluate(function) - rhs_->Evaluate(function);
-                    case Type::Multiply: return lhs_->Evaluate(function) * rhs_->Evaluate(function);
-                    case Type::Divide:
-                        if(rhs_->Evaluate(function) == 0){ throw FormulaError::Category::Div0; }
-                        return lhs_->Evaluate(function) / rhs_->Evaluate(function);
-                    default: assert(false);
+                    case Type::Add:{
+                        if(std::isfinite(lhs_->Evaluate(args) + rhs_->Evaluate(args))){
+                            return lhs_->Evaluate(args) + rhs_->Evaluate(args);
+                        }
+                        break;
+                    }
+                    case Type::Subtract:{
+                        if(std::isfinite(lhs_->Evaluate(args) - rhs_->Evaluate(args))){
+                            return lhs_->Evaluate(args) - rhs_->Evaluate(args);
+                        }
+                        break;
+                    }
+                    case Type::Multiply:{
+                        if(std::isfinite(lhs_->Evaluate(args) * rhs_->Evaluate(args))){
+                            return lhs_->Evaluate(args) * rhs_->Evaluate(args);
+                        }
+                        break;
+                    }
+                    case Type::Divide:{
+                        if(std::isfinite(lhs_->Evaluate(args) / rhs_->Evaluate(args))){
+                            return lhs_->Evaluate(args) / rhs_->Evaluate(args);
+                        }
+                        break;
+                    }
+                    default:
+                        // have to do this because VC++ has a buggy warning
+                        assert(false);
+                        return static_cast<ExprPrecedence>(INT_MAX);
                 }
+                throw FormulaError(FormulaError::Category::Div0);
             }
 
         private:
@@ -186,18 +206,47 @@ namespace ASTImpl {
                 operand_->PrintFormula(out, precedence);
             }
 
-            ExprPrecedence GetPrecedence() const override {
+            [[nodiscard]] ExprPrecedence GetPrecedence() const override {
                 return EP_UNARY;
             }
 
-// Реализуйте метод Evaluate() для унарных операций.
-            double Evaluate(const CellTranslator& function) const override {
-                return type_ == Type::UnaryPlus ? operand_->Evaluate(function) : -1 * operand_->Evaluate(function);
+            [[nodiscard]] double Evaluate(const CellTranslator &args) const override {
+                return type_ == Type::UnaryPlus ? operand_->Evaluate(args) : -1 * operand_->Evaluate(args);
             }
 
         private:
             Type type_;
             std::unique_ptr<Expr> operand_;
+        };
+
+        class CellExpr final : public Expr {
+        public:
+            explicit CellExpr(const Position* cell)
+                    : cell_(cell) {
+            }
+
+            void Print(std::ostream& out) const override {
+                if (!cell_->IsValid()) {
+                    out << FormulaError::Category::Ref;
+                } else {
+                    out << cell_->ToString();
+                }
+            }
+
+            void DoPrintFormula(std::ostream& out, ExprPrecedence /* precedence */) const override {
+                Print(out);
+            }
+
+            [[nodiscard]] ExprPrecedence GetPrecedence() const override {
+                return EP_ATOM;
+            }
+
+            [[nodiscard]] double Evaluate(const CellTranslator& args) const override {
+                return args(*cell_);
+            }
+
+        private:
+            const Position* cell_;
         };
 
         class NumberExpr final : public Expr {
@@ -214,12 +263,11 @@ namespace ASTImpl {
                 out << value_;
             }
 
-            ExprPrecedence GetPrecedence() const override {
+            [[nodiscard]] ExprPrecedence GetPrecedence() const override {
                 return EP_ATOM;
             }
 
-// Для чисел метод возвращает значение числа.
-            double Evaluate(const CellTranslator& function) const override {
+            [[nodiscard]] double Evaluate(const CellTranslator& args) const override {
                 return value_;
             }
 
@@ -237,18 +285,13 @@ namespace ASTImpl {
                 return root;
             }
 
-            std::forward_list<Position> MoveCells()
-            {
+            std::forward_list<Position> MoveCells() {
                 return std::move(cells_);
             }
+
         public:
-
-            void exitCell(FormulaParser::CellContext *ctx) override{
-                // TODO ::
-            }
-
             void exitUnaryOp(FormulaParser::UnaryOpContext* ctx) override {
-                assert(args_.size() >= 1);
+                assert(!args_.empty());
 
                 auto operand = std::move(args_.back());
 
@@ -274,6 +317,18 @@ namespace ASTImpl {
                 }
 
                 auto node = std::make_unique<NumberExpr>(value);
+                args_.push_back(std::move(node));
+            }
+
+            void exitCell(FormulaParser::CellContext* ctx) override {
+                auto value_str = ctx->CELL()->getSymbol()->getText();
+                auto value = Position::FromString(value_str);
+                if (!value.IsValid()) {
+                    throw FormulaException("Invalid position: " + value_str);
+                }
+
+                cells_.push_front(value);
+                auto node = std::make_unique<CellExpr>(&cells_.front());
                 args_.push_back(std::move(node));
             }
 
@@ -349,10 +404,12 @@ FormulaAST ParseFormulaAST(std::istream& in) {
 
 FormulaAST ParseFormulaAST(const std::string& in_str) {
     std::istringstream in(in_str);
-    try {
-        return ParseFormulaAST(in);
-    } catch (const std::exception& exc) {
-        std::throw_with_nested(FormulaException(exc.what()));
+    return ParseFormulaAST(in);
+}
+
+void FormulaAST::PrintCells(std::ostream& out) const {
+    for (auto cell : cells_) {
+        out << cell.ToString() << ' ';
     }
 }
 
@@ -364,20 +421,14 @@ void FormulaAST::PrintFormula(std::ostream& out) const {
     root_expr_->PrintFormula(out, ASTImpl::EP_ATOM);
 }
 
-const std::forward_list<Position>& FormulaAST::GetCellPositions() const {
-    return cell_positions_;
+double FormulaAST::Execute(const CellTranslator& args) const {
+    return root_expr_->Evaluate(args);
 }
 
-std::forward_list<Position>& FormulaAST::GetCells() {
-    return cell_positions_;
-}
-
-double FormulaAST::Execute(const CellTranslator& function) const {
-    return root_expr_->Evaluate(function);
-}
-
-FormulaAST::FormulaAST(std::unique_ptr<ASTImpl::Expr> root_expr, std::forward_list<Position> cells_position)
-        : root_expr_(std::move(root_expr)), cell_positions_(std::move(cells_position)) {
+FormulaAST::FormulaAST(std::unique_ptr<ASTImpl::Expr> root_expr, std::forward_list<Position> cells)
+        : root_expr_(std::move(root_expr))
+        , cells_(std::move(cells)) {
+    cells_.sort();  // to avoid sorting in GetReferencedCells
 }
 
 FormulaAST::~FormulaAST() = default;

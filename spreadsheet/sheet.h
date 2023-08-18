@@ -4,6 +4,9 @@
 #include "common.h"
 #include <functional>
 #include <tuple>
+#include <set>
+#include <iostream>
+#include <optional>
 
 class Sheet : public SheetInterface {
     enum class OutMode{ TEXT, VALUE };
@@ -12,6 +15,7 @@ class Sheet : public SheetInterface {
         size_t operator()(Position pos) const noexcept{
             return hasher_(pos.row)*Position::MAX_COLS + hasher_(pos.col);
         }
+
     private:
         std::hash<int> hasher_;
     };
@@ -33,18 +37,20 @@ public:
 
     void PrintValues(std::ostream& output) const override;
     void PrintTexts(std::ostream& output) const override;
+
 private:
     void TryChangePrintableArea(Position pos) noexcept;
-
     void ComputePrintableArea();
-
     void Printer(std::ostream& output, const OutMode& mode) const;
 
-    // Можете дополнить ваш класс нужными полями и методами
+
+    bool IsCycle(Position position, const std::set<Position>& references, std::set<Position>& verified) const;
+    void CheckCyclic(const Cell* cell, Position position);
+    void UpdateDependencies(Cell* cell, Position pos);
+
 private:
     Table table_;
     Size printable_size_;
-    // Можете дополнить ваш класс нужными полями и методами
 };
 
 inline void ValidatePosition(Position pos){

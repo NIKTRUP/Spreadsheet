@@ -9,7 +9,7 @@ public:
 
     Cell(std::string text, SheetInterface& sheet);
     explicit Cell(SheetInterface& sheet);
-    ~Cell();
+    ~Cell() override = default;
 
     void Set(std::string text);
     void Clear();
@@ -18,6 +18,9 @@ public:
     std::string GetText() const override;
 
     std::vector<Position> GetReferencedCells() const override;
+    std::vector<Position> GetDependentCells() const;
+
+    void PushBackDependentCell(Position pos) override;
 
 private:
     class Impl;
@@ -25,21 +28,24 @@ private:
     class TextImpl;
     class FormulaImpl;
 
-    static std::unique_ptr<Impl> InitCell(std::string& text, const SheetInterface& sheet);
+    void ClearCache() override;
+    std::unique_ptr<Impl> InitCell(std::string& text);
+
 
 private:
-    std::unique_ptr<Impl> impl_;
     SheetInterface& sheet_; // Ссылка на таблицу
+    std::unique_ptr<Impl> impl_;
 
-    mutable std::optional<Value> cached_value_; // Кэш
-    std::vector<Position> referenced_cells_; // Ячейки, от которых зависит текущая ячейка
-    std::vector<Position> dependent_cells_; // Ячейки, которые зависят от текущей ячейки
+    mutable std::optional<Value> cash_; // Кэш
+    std::vector<Position> referenced_cells_; // Ячейки, от которых зависит ячейка
+    std::vector<Position> dependent_cells_; // Ячейки, которые зависят от ячейки
 };
 
 class Cell::Impl{
 public:
-    virtual std::string GetText() const = 0;
-    virtual Value GetValue() const = 0;
+    [[nodiscard]] virtual std::string GetText() const = 0;
+    [[nodiscard]] virtual Value GetValue() const = 0;
+    [[nodiscard]] virtual std::vector<Position> GetReferencedCells() const = 0;
 protected:
     Value value_;
     std::string text_;
@@ -48,30 +54,27 @@ protected:
 class Cell::EmptyImpl : public Impl {
 public:
     EmptyImpl();
-
-    std::string  GetText() const override;
-
-    Value GetValue() const override;
+    [[nodiscard]] std::string  GetText() const override;
+    [[nodiscard]] Value GetValue() const override;
+    [[nodiscard]] std::vector<Position> GetReferencedCells() const override;
 };
 
 class Cell::TextImpl : public Impl {
 public:
     explicit TextImpl(std::string_view text);
-
-    std::string  GetText() const override;
-
-    Value GetValue() const override;
+    [[nodiscard]] std::string  GetText() const override;
+    [[nodiscard]] Value GetValue() const override;
+    [[nodiscard]] std::vector<Position> GetReferencedCells() const override;
 };
 
 class Cell::FormulaImpl : public Impl {
 public:
     explicit FormulaImpl(std::string_view expression, const SheetInterface& sheet);
-
-    std::string  GetText() const override;
-
-    Value GetValue() const override;
+    [[nodiscard]] std::string  GetText() const override;
+    [[nodiscard]] Value GetValue() const override;
+    [[nodiscard]] std::vector<Position> GetReferencedCells() const override;
 
 private:
-    std::unique_ptr<FormulaInterface> formula_;
     const SheetInterface& sheet_;
+    std::unique_ptr<FormulaInterface> formula_;
 };
