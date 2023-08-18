@@ -109,6 +109,7 @@ public:
     // ячеек. В случае текстовой ячейки список пуст.
     [[nodiscard]] virtual std::vector<Position> GetReferencedCells() const = 0;
 
+    // Добавляет ячейку, которая зависит от текущей.
     virtual void PushBackDependentCell(Position pos) = 0;
 
     // Очищает кэш текущей и всех зависимых ячеек.
