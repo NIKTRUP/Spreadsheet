@@ -1,2 +1,2 @@
-# cpp-spreadsheet
+# Spreadsheet
 Дипломный проект: Электронная таблица
