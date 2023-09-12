@@ -43,7 +43,6 @@ private:
     void ComputePrintableArea();
     void Printer(std::ostream& output, const OutMode& mode) const;
 
-
     bool IsCycle(Position position, const std::set<Position>& references, std::set<Position>& verified) const;
     void CheckCyclic(const Cell* cell, Position position);
     void UpdateDependencies(Cell* cell, Position pos);

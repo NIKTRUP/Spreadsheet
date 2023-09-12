@@ -1,4 +1,4 @@
-#include "FormulaAST.h"
+#include "../include/FormulaAST.h"
 
 #include "FormulaBaseListener.h"
 #include "FormulaLexer.h"

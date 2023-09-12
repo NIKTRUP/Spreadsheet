@@ -33,15 +33,13 @@ include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/antlr4_runtime/runtime/src
 )
 
-file(GLOB sources
-        *.cpp
-        *.h
-        )
+file(GLOB sources ./src/*.cpp)
+file(GLOB include ./include/*.h)
 
 add_executable(
         spreadsheet
         ${ANTLR_FormulaParser_CXX_OUTPUTS}
-        ${sources})
+        main.cpp ${sources} ${include})
 
 target_link_libraries(spreadsheet antlr4_static)
 if(MSVC)

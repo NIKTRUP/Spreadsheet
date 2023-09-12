@@ -1,5 +1,5 @@
-#include "formula.h"
-#include "FormulaAST.h"
+#include "../include/formula.h"
+#include "../include/FormulaAST.h"
 
 #include <algorithm>
 #include <sstream>
