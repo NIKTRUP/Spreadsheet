@@ -35,7 +35,18 @@ std::cout << "A1 text = " << a1->GetText() << std::endl; // A1 text = =A4
 sheet->PrintTexts(std::cout);
 sheet->PrintValues(std::cout);
 ```
-
+<details> <summary> результат </summary>
+  
+``` txt
+A1 value = 27
+A1 text = =A4
+=A4		
+		
+	Ready	
+27		
+		=B3
+```
+</details>
 
 # Сборка и установка
 Для сборки программы необходим  C++, поддерживающий стандарт C++17 и выше, Cmake не ниже версии 3.8, ANTLR4. ANTLR написан на Java, поэтому для его работы вам понадобится комплект разработки [JDK](https://www.oracle.com/java/technologies/downloads/). Вы также можете использовать OpenJDK. Установите JDK в свою систему. Инструкцию по установке ANTLR можно найти на сайте [antlr.org](https://www.antlr.org/download.html). Более подробные рекомендации представлены в руководстве [Getting Started](https://github.com/antlr/antlr4/blob/master/doc/getting-started.md).
